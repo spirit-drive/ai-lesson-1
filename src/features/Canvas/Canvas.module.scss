@@ -1,0 +1,15 @@
+.root {
+  display: inline-block;
+  background-color: #000;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.cell {
+  width: 28px;
+  height: 28px;
+  background-color: #fff;
+}
