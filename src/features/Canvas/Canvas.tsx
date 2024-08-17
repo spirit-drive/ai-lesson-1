@@ -10,14 +10,13 @@ export type CanvasProps = {
 export const Canvas = ({ className, data }: CanvasProps) => {
   const size = Math.sqrt(data.length);
   if (size !== ~~size) throw new Error(`data must be a square`);
-  let index = 0;
 
   return (
     <div className={clsx(s.root, className)}>
       {Array.from({ length: size }, (_, i) => (
         <div key={i} className={s.row}>
           {Array.from({ length: size }, (__, j) => (
-            <div key={j} className={s.cell} style={{ opacity: data[index++] }} />
+            <div key={j} className={s.cell} style={{ opacity: data[i * size + j] }} />
           ))}
         </div>
       ))}
