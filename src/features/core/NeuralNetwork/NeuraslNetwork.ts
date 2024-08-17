@@ -1,21 +1,21 @@
 import mnist from 'mnist';
 
 export class NeuralNetwork {
-  weightsInputHidden;
-  weightsHiddenOutput;
-  biasHidden: number[];
-  biasOutput: number[];
+  weights: number[][][];
+  biases: number[][];
   learningRate: number;
-  hiddenInput: number[];
-  hiddenOutput: number[];
-  finalInput: number[];
-  finalOutput: number[];
-  constructor(inputSize: number, hiddenSize: number, outputSize: number) {
+  inputs: number[][];
+  outputs: number[][];
+  constructor(...layers: number[]) {
     // Инициализация весов
-    this.weightsInputHidden = this.initWeights(inputSize, hiddenSize);
-    this.weightsHiddenOutput = this.initWeights(hiddenSize, outputSize);
-    this.biasHidden = Array(hiddenSize).fill(0);
-    this.biasOutput = Array(outputSize).fill(0);
+    this.weights = [];
+    this.biases = [];
+    this.inputs = [];
+    this.outputs = [];
+    for (let i = 0; i < layers.length - 1; i++) {
+      this.weights.push(this.initWeights(layers[i], layers[i + 1]));
+      this.biases.push(Array(layers[i + 1]).fill(0));
+    }
     this.learningRate = 0.01;
   }
 
@@ -43,31 +43,41 @@ export class NeuralNetwork {
 
   // Прямое распространение
   forward(input: number[]) {
-    // Скрытый слой
-    this.hiddenInput = this.addBias(this.dotProduct(input, this.weightsInputHidden), this.biasHidden);
-    this.hiddenOutput = this.relu(this.hiddenInput);
+    let vector = input;
+    for (let i = 0; i < this.biases.length - 1; i++) {
+      // Скрытые слои
+      vector = this.inputs[i] = this.addBias(this.dotProduct(vector, this.weights[i]), this.biases[i]);
+      this.outputs[i] = this.relu(vector);
+    }
+
+    const lastIndex = this.biases.length - 1;
 
     // Выходной слой
-    this.finalInput = this.addBias(this.dotProduct(this.hiddenOutput, this.weightsHiddenOutput), this.biasOutput);
-    this.finalOutput = this.softmax(this.finalInput);
-
-    return this.finalOutput;
+    this.inputs[lastIndex] = this.addBias(
+      this.dotProduct(this.outputs[lastIndex - 1], this.weights[lastIndex]),
+      this.biases[lastIndex]
+    );
+    this.outputs[lastIndex] = this.softmax(this.inputs[lastIndex]);
+    return this.outputs[lastIndex];
   }
 
   // Обратное распространение
   backward(input: number[], target: number[]) {
-    // Выходной слой
-    const outputErrors = this.finalOutput.map((o, i) => o - target[i]);
-    const hiddenErrors = this.dotProductTransposed(outputErrors, this.weightsHiddenOutput);
+    let outputErrors = this.outputs[this.outputs.length - 1].map((o, i) => o - target[i]);
 
-    // Обновляем веса и смещения между скрытым и выходным слоем
-    this.updateWeights(this.weightsHiddenOutput, this.hiddenOutput, outputErrors, this.biasOutput);
+    for (let i = this.weights.length - 1; i > 0; i--) {
+      // Выходной слой
+      const layerErrors = this.dotProductTransposed(outputErrors, this.weights[i]);
+
+      // Обновляем веса и смещения между скрытым и выходным слоем
+      this.updateWeights(this.weights[i], this.outputs[i - 1], outputErrors, this.biases[i]);
+      outputErrors = layerErrors;
+    }
 
     // Производная ReLU для скрытого слоя
-    const hiddenGrad = this.reluDerivative(this.hiddenInput).map((g, i) => g * hiddenErrors[i]);
-
+    const hiddenGrad = this.reluDerivative(this.inputs[0]).map((g, i) => g * outputErrors[i]);
     // Обновляем веса и смещения между входным и скрытым слоем
-    this.updateWeights(this.weightsInputHidden, input, hiddenGrad, this.biasHidden);
+    this.updateWeights(this.weights[0], input, hiddenGrad, this.biases[0]);
   }
 
   // Функция для обновления весов и смещений
@@ -92,7 +102,7 @@ export class NeuralNetwork {
     for (let j = 0; j < colsB; j++) {
       let sum = 0;
       for (let i = 0; i < vector.length; i++) {
-        sum += vector[i] * matrixB[i][j];
+        sum += vector[i] * matrixB[i]?.[j] || 0;
       }
       result[j] = sum;
     }
@@ -118,21 +128,24 @@ export class NeuralNetwork {
 }
 
 // Пример использования сети
-export const nn = new NeuralNetwork(784, 784, 10); // 784 входов (28x28 пикселей), 128 скрытых нейронов, 10 выходов (цифры 0-9)
+export const nn = new NeuralNetwork(784, 128, 10); // 784 входов (28x28 пикселей), 128 скрытых нейронов, 10 выходов (цифры 0-9)
 
 const { training, test } = mnist.set(8000, 2000);
 
 export { training, test };
 
+console.time('training');
 for (let i = 0; i < training.length; i++) {
   const input = training[i].input;
   const target = training[i].output;
   nn.train(input, target);
 }
+console.timeEnd('training');
 
 let right = 0;
 let mistake = 0;
 
+console.time('test');
 for (let i = 0; i < test.length; i++) {
   const input = test[i].input;
   const target = test[i].output;
@@ -151,4 +164,5 @@ for (let i = 0; i < test.length; i++) {
     mistake++;
   }
 }
+console.timeEnd('test');
 console.log({ mistake, right }, right / test.length);
